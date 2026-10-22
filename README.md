@@ -1,26 +1,43 @@
 # AgenticPythonScripts
 
 A small collection of Python automation scripts. The first tool in this repository is a
-SQL Server database structure exporter for documentation, analysis, and AI-assisted database
-work.
+SQL Server database structure exporter that turns a database's schema into documentation and a
+structured knowledge source for AI assistants such as Microsoft Copilot.
 
 ## SQL Server database structure exporter
 
 [`export_sql_database_structure.py`](./export_sql_database_structure.py) connects to a SQL Server
-database and exports its **structure and metadata**. It is intended to help database
-administrators and developers document a schema, inspect relationships, and prepare a structured
-knowledge source for tools such as Microsoft Copilot.
+database and exports its **structure and metadata**, not business records. Its main purpose is to
+make the database easier for people and AI assistants to understand. The generated files describe
+what objects exist, how tables and columns are shaped, how objects relate, and what SQL definitions
+are available.
 
-The exporter does **not** read or export table row data. It generates a timestamped export
-directory and ZIP archives containing:
+An AI assistant cannot reliably answer questions about a private database unless it has access to
+relevant, accurate database context. The optional `CopilotKnowledge` output packages that context
+as readable Markdown and supporting metadata. Add the reviewed files to a supported knowledge
+source (for example, a SharePoint site used by Microsoft Copilot), or provide them to an AI tool
+that can search or retrieve files. The assistant can then use the exported schema as grounding
+when answering questions such as:
+
+- Which tables and columns are relevant to a particular business concept?
+- What is the data type of a column, and can it be nullable?
+- Which foreign keys connect two tables?
+- What views, stored procedures, functions, or triggers are defined?
+- Which objects depend on a given table or are referenced by it?
+
+This is **schema context**, not a live database connection. It does not let an AI query the
+database or see the actual values stored in rows. Answers are limited by what the export captured,
+what the user's knowledge-source platform indexed, and the permissions applied to that source.
+
+The exporter creates a timestamped export directory and ZIP archives containing:
 
 - CSV catalogues for schemas, objects, columns, keys, foreign keys, indexes, constraints,
   parameters, dependencies, triggers, synonyms, and other database metadata.
 - Individual SQL files for supported tables, views, procedures, functions, triggers, synonyms,
   and sequences, where definitions are available.
 - A combined schema SQL file, database information, an object status index, and a JSON manifest.
-- Optionally, a `CopilotKnowledge` directory with per-object Markdown, metadata, a database
-  overview, agent guidance, and a register of unavailable definitions.
+- By default, a `CopilotKnowledge` directory with a database overview, per-object Markdown,
+  copied metadata, guidance for an AI assistant, and a register of unavailable definitions.
 
 ### Important: scope and limitations
 
@@ -134,9 +151,54 @@ Important files include:
 - `DatabaseInfo.json` and `Manifest.json`: database details, export options, counts, and warnings.
 - `CopilotKnowledge\`: object-level Markdown and copied metadata organized for knowledge ingestion.
 
-For a SharePoint knowledge source, upload the **contents** of the `CopilotKnowledge` folder and
-preserve its folder hierarchy. Review the generated content before making it available to other
-people.
+## Use the export as an AI knowledge source
+
+The `CopilotKnowledge` folder is the AI-oriented version of the export. It presents catalog data
+and definitions in smaller, human-readable files that are easier to browse and retrieve than one
+large SQL script. It contains:
+
+- `00-Database-Overview.md` — identifies the database, export time, and object counts. Use it as
+  the starting point for understanding the scope and freshness of the snapshot.
+- `01-Metadata\` — CSV catalogues for structured facts such as schemas, objects, columns, keys,
+  foreign keys, indexes, dependencies, and parameters, plus database information, the export
+  manifest, and object scripting status. These files are useful for exact lookups and
+  cross-checking relationships.
+- Numbered object folders such as `02-Tables\`, `03-Views\`, and `04-StoredProcedures\` — one
+  Markdown file per object, with available properties, columns or parameters, dependencies, and
+  SQL definition. The numbered folders group related object types and keep the collection
+  navigable.
+- `99-Reference\Unavailable-Objects.md` — lists definitions the exporter could not provide, along
+  with the status and reason when available. An absent definition should not be treated as proof
+  that an object does not exist.
+- `README.md` — tells an AI assistant to ground its answers in the exported files, not invent
+  objects or relationships, and treat unavailable or encrypted modules as opaque.
+
+### Add it to a knowledge source
+
+1. Run the exporter and locate the generated `CopilotKnowledge` folder, or use the matching
+   `_CopilotKnowledge.zip` archive.
+2. Review the files, especially object definitions and the unavailable-object register. SQL source
+   and metadata can include internal names or other environment-specific details.
+3. Upload the **contents** of `CopilotKnowledge` to a supported knowledge source and preserve its
+   folder structure where the platform allows. For a SharePoint-backed Copilot source, configure
+   the relevant SharePoint site or library as the source according to your organization's
+   Microsoft 365 setup.
+4. Give users access to that source, then ask questions that refer to its database context. For
+   example: “Using the exported schema, which tables appear to relate these entities? Cite the
+   object files you used, and say when the export does not contain enough information.”
+5. Generate and publish a fresh export after schema changes. Each export is a snapshot from its
+   generation time; it does not update automatically.
+
+Knowledge-source features, supported file types, size limits, and indexing behavior vary by AI
+product and tenant configuration. Follow the product's current setup guidance. The exporter
+creates the files; it does not configure Copilot, upload files, or guarantee that a particular
+assistant will index every file.
+
+For better answers, keep the export current, include only files approved for the audience, and
+encourage the AI to cite the relevant object or metadata files and acknowledge missing information.
+Do not treat generated DDL as proof that a database can be recreated exactly, or AI-generated
+answers as a substitute for validating SQL against the live database and your organization's
+documentation.
 
 ## Troubleshooting
 
@@ -149,6 +211,10 @@ people.
   validation.
 - **Objects missing or definitions unavailable**: metadata visibility is permission-dependent;
   encrypted modules do not reveal their source definitions.
+- **AI answers appear incomplete or outdated**: check that the correct `CopilotKnowledge` export
+  was added and indexed, that the user can access the knowledge source, and that it was regenerated
+  after the relevant database changes. Check `99-Reference\Unavailable-Objects.md` and the
+  `01-Metadata` status files for omissions.
 - **DDL needs review**: check `ScriptedObjectIndex.csv` notes and the limitations above. This
   exporter does not promise a complete, production-ready database recreation script.
 
